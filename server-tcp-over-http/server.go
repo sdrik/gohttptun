@@ -110,7 +110,7 @@ func proxyMuxer() {
 			key := make([]byte, keyLen)
 			// read key
 			n, err := pp.r.Body.Read(key)
-			if n != keyLen || err != nil {
+			if n != keyLen || (err != nil && err != io.EOF) {
 				log.Println("Couldn't read key", key)
 				continue
 			}

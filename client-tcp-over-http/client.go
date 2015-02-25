@@ -101,7 +101,7 @@ func main() {
 				"http://"+*httpAddr+"/ping",
 				"application/octet-stream",
 				req)
-			if err != nil {
+			if err != nil && err != io.EOF {
 				log.Println(err.Error())
 				continue
 			}
