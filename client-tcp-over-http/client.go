@@ -87,7 +87,7 @@ func main() {
 	panicOn(err)
 	resp.Body.Close()
 
-	log.Printf("client main(): after Post('/create') we got ResponseWriter with key = '%s'", string(key))
+	log.Printf("client main(): after Post('/create') we got ResponseWriter with key = '%x'", key)
 
 	// ticker to set a rate at which to hit the server
 	tick := time.NewTicker(time.Duration(int64(*tickInterval)) * time.Millisecond)
@@ -101,7 +101,7 @@ func main() {
 			buf.Write(b)
 
 		case <-tick.C:
-			po("client: got tick.C\n")
+			po("client: got tick.C. key as always(?) = '%x'\n", key)
 			// write buf to new http request, starting with key
 			req := bytes.NewBuffer(key)
 			buf.WriteTo(req)

@@ -48,10 +48,10 @@ type proxy struct {
 }
 
 type proxyPacket struct {
-	resp http.ResponseWriter
-	req  *http.Request
-	body []byte
-	done chan bool
+	resp    http.ResponseWriter
+	request *http.Request
+	body    []byte
+	done    chan bool
 }
 
 // print out shortcut
@@ -75,16 +75,21 @@ func NewProxy(key, destAddr string) (p *proxy, err error) {
 func (p *proxy) handle(pp proxyPacket) {
 	po("in proxy::handle(pp) with pp = '%#v'\n", pp)
 	// read from the request body and write to the ResponseWriter
-	_, err := io.Copy(p.conn, pp.req.Body)
-	pp.req.Body.Close()
+	n, err := p.conn.Write(pp.body)
+	if n != len(pp.body) {
+		log.Printf("proxy::handle(pp): could only write %d of the %d bytes to the connection. err = '%v'", n, len(pp.body), err)
+	}
+	pp.request.Body.Close()
 	if err == io.EOF {
 		p.conn = nil
-		log.Println("eof", p.key)
+		log.Printf("proxy::handle(pp): EOF for key '%x'", p.key)
 		return
 	}
 	// read out of the buffer and write it to conn
 	pp.resp.Header().Set("Content-type", "application/octet-stream")
-	io.Copy(pp.resp, p.conn)
+	n64, err := io.Copy(pp.resp, p.conn)
+	// don't panicOn(err)
+	log.Printf("proxy::handle(pp): io.Copy into pp.resp from p.conn moved %d bytes", n64)
 	pp.done <- true
 	po("proxy::handle(pp) done.\n")
 }
@@ -95,13 +100,13 @@ var createQueue = make(chan *proxy)
 func handler(c http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	panicOn(err)
-	po("in handler, making new proxyPacket, http.Request r = '%#v'. r.Body = '%s'\n", *r, string(body))
+	po("top level handler(): in '/' and '/ping' and everything-not-'/create': making new proxyPacket, http.Request r = '%#v'. r.Body = '%s'\n", *r, string(body))
 
 	pp := proxyPacket{
-		resp: c,
-		req:  r,
-		body: body,
-		done: make(chan bool),
+		resp:    c,
+		request: r,
+		body:    body,
+		done:    make(chan bool),
 	}
 	queue <- pp
 	<-pp.done // wait until done before returning, as this will return anything written to c to the client.
@@ -122,7 +127,7 @@ func (s *Server) createHandler(c http.ResponseWriter, r *http.Request) {
 	*/
 
 	key := genKey()
-	po("Server::createHandler generated key '%s'\n", key)
+	po("in createhandler(): Server::createHandler generated key '%s'\n", key)
 
 	p, err := NewProxy(key, s.destAddr)
 	if err != nil {
@@ -130,7 +135,10 @@ func (s *Server) createHandler(c http.ResponseWriter, r *http.Request) {
 			http.StatusInternalServerError)
 		return
 	}
+	po("Server::createHandler about to send createQueue <- p, where p = %p\n", p)
 	createQueue <- p
+	po("Server::createHandler(): sent createQueue <- p.\n")
+
 	c.Write([]byte(key))
 	po("Server::createHandler done.\n")
 }
@@ -143,22 +151,27 @@ func proxyMuxer() {
 		case pp := <-queue:
 			key := make([]byte, keyLen)
 			// read key
-			n, err := pp.req.Body.Read(key)
-			if n < keyLen || (err != nil && err != io.EOF) {
-				log.Println("Couldn't read key", key)
+			//n, err := pp.req.Body.Read(key)
+			if len(pp.body) < keyLen {
+				log.Printf("Couldn't read key, not enough bytes in body. len(body) = %d\n", len(pp.body))
 				continue
 			}
+			copy(key, pp.body)
+
+			po("proxyMuxer: from pp <- queue, we read key '%x'\n", key)
 			// find proxy
 			p, ok := proxyMap[string(key)]
 			if !ok {
-				log.Println("Couldn't find proxy", key)
+				log.Printf("Couldn't find proxy for key = '%x'", key)
 				continue
 			}
 			// handle
-			po("proxyMuxer found proxy for key '%s'\n", string(key))
+			po("proxyMuxer found proxy for key '%x'\n", key)
 			p.handle(pp)
 		case p := <-createQueue:
+			po("proxyMuxer: got p=%p on <-createQueue\n", p)
 			proxyMap[p.key] = p
+			po("proxyMuxer: after adding key '%x', proxyMap is now: '%#v'\n", p.key, proxyMap)
 		}
 	}
 	po("proxyMuxer done\n")
