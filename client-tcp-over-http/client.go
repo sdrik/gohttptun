@@ -36,7 +36,7 @@ const bufSize = 1024
 var (
 	listenAddr   = flag.String("listen", ":2222", "local listen address")
 	httpAddr     = flag.String("http", "127.0.0.1:8888", "remote tunnel server")
-	tickInterval = flag.Int("tick", 5000, "update interval (msec)") // orig: 250
+	tickInterval = flag.Int("tick", 500, "update interval (msec)") // orig: 250
 )
 
 // take a reader, and turn it into a channel of bufSize chunks of []byte
@@ -75,6 +75,8 @@ func main() {
 
 	buf := new(bytes.Buffer)
 
+	sendCount := 0
+
 	// initiate new session and read key
 	log.Println("Attempting connect HttpTun Server.", *httpAddr)
 	//buf.Write([]byte(*destAddr))
@@ -97,11 +99,14 @@ func main() {
 		select {
 		case b := <-read:
 			// fill buf here
-			po("client: <-read of '%s'\n", string(b))
+			po("client: <-read of '%s' of length %d added to buffer\n", string(b), len(b))
 			buf.Write(b)
+			po("client: after write to buf of len(b)=%d, buf is now length %d\n", len(b), buf.Len())
 
 		case <-tick.C:
-			po("client: got tick.C. key as always(?) = '%x'\n", key)
+			sendCount++
+			po("\n ====================\n client sendCount = %d\n ====================\n", sendCount)
+			po("client: sendCount %d, got tick.C. key as always(?) = '%x'. buf is now size %d\n", sendCount, key, buf.Len())
 			// write buf to new http request, starting with key
 			req := bytes.NewBuffer(key)
 			buf.WriteTo(req)

@@ -6,3 +6,6 @@ debug:
 
 run:
 	cd ..; make run
+
+clean:
+	cd ..; make clean

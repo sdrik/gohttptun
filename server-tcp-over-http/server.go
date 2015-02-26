@@ -37,14 +37,15 @@ type Server struct {
 }
 
 const (
-	readTimeoutMsec = 12000
+	readTimeoutMsec = 1000
 	keyLen          = 64
 )
 
 type proxy struct {
-	C    chan proxyPacket
-	key  string
-	conn net.Conn
+	C         chan proxyPacket
+	key       string
+	conn      net.Conn
+	recvCount int
 }
 
 type proxyPacket struct {
@@ -59,7 +60,7 @@ var po = fmt.Printf
 
 func NewProxy(key, destAddr string) (p *proxy, err error) {
 	po("starting with NewProxy\n")
-	p = &proxy{C: make(chan proxyPacket), key: key}
+	p = &proxy{C: make(chan proxyPacket), key: key, recvCount: 1}
 	log.Println("Attempting connect", destAddr)
 	p.conn, err = net.Dial("tcp", destAddr)
 	panicOn(err)
@@ -73,11 +74,16 @@ func NewProxy(key, destAddr string) (p *proxy, err error) {
 }
 
 func (p *proxy) handle(pp proxyPacket) {
+	p.recvCount++
+	po("\n ====================\n server proxy.recvCount = %d    len(pp.body)= %d\n ================\n", p.recvCount, len(pp.body))
+
 	po("in proxy::handle(pp) with pp = '%#v'\n", pp)
 	// read from the request body and write to the ResponseWriter
 	n, err := p.conn.Write(pp.body)
 	if n != len(pp.body) {
 		log.Printf("proxy::handle(pp): could only write %d of the %d bytes to the connection. err = '%v'", n, len(pp.body), err)
+	} else {
+		log.Printf("proxy::handle(pp): wrote all %d bytes to the final (sshd server) connection.", len(pp.body))
 	}
 	pp.request.Body.Close()
 	if err == io.EOF {
@@ -100,7 +106,7 @@ var createQueue = make(chan *proxy)
 func handler(c http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	panicOn(err)
-	po("top level handler(): in '/' and '/ping' and everything-not-'/create': making new proxyPacket, http.Request r = '%#v'. r.Body = '%s'\n", *r, string(body))
+	po("top level handler(): in '/' and '/ping' handler, packet len without key: %d: making new proxyPacket, http.Request r = '%#v'. r.Body = '%s'\n", len(body)-keyLen, *r, string(body))
 
 	pp := proxyPacket{
 		resp:    c,
