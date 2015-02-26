@@ -1,7 +1,23 @@
+
+.phony: all debug run
+
 all:
-	cd client-tcp-over-http; go build -o client-tcp-over-http
-	cd server-tcp-over-http; go build -o server-tcp-over-http
+	go install
+	cd client-tcp-over-http; go build -o client-tcp-over-http; cp -p client-tcp-over-http ../bin
+	cd server-tcp-over-http; go build -o server-tcp-over-http; cp -p server-tcp-over-http ../bin
 
 debug:
-	cd client; go build  -gcflags "-N -l" -o client-tcp-over-http
-	cd server; go build  -gcflags "-N -l" -o server-tcp-over-http
+	go install  -gcflags "-N -l" 
+	cd client-tcp-over-http; go build -gcflags "-N -l"  -o client-tcp-over-http; cp -p client-tcp-over-http
+	cd server-tcp-over-http; go build -gcflags "-N -l"  -o server-tcp-over-http; cp -p server-tcp-over-http
+
+run:
+	pkill -9 client-tcp-over-http || echo
+	pkill -9 server-tcp-over-http || echo
+	bin/server-tcp-over-http &
+	bin/client-tcp-over-http &
+
+clean:
+	rm -f *~
+	pkill -9 client-tcp-over-http || echo
+	pkill -9 server-tcp-over-http || echo

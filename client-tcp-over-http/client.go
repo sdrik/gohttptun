@@ -19,6 +19,7 @@ package main
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -27,13 +28,15 @@ import (
 	"time"
 )
 
+// print out shortcut
+var po = fmt.Printf
+
 const bufSize = 1024
 
 var (
 	listenAddr   = flag.String("listen", ":2222", "local listen address")
 	httpAddr     = flag.String("http", "127.0.0.1:8888", "remote tunnel server")
-	destAddr     = flag.String("dest", "127.0.0.1:22", "tunnel destination")
-	tickInterval = flag.Int("tick", 250, "update interval (msec)")
+	tickInterval = flag.Int("tick", 5000, "update interval (msec)") // orig: 250
 )
 
 // take a reader, and turn it into a channel of bufSize chunks of []byte
@@ -56,13 +59,13 @@ func makeReadChan(r io.Reader, bufSize int) chan []byte {
 
 func main() {
 	flag.Parse()
-	log.SetPrefix("httptun.c: ")
+	log.SetPrefix("tun.client: ")
 
 	listener, err := net.Listen("tcp", *listenAddr)
 	if err != nil {
 		panic(err)
 	}
-	log.Println("listen", *listenAddr)
+	log.Printf("listen on '%v', with httpAddr '%v'", *listenAddr, *httpAddr)
 
 	conn, err := listener.Accept()
 	if err != nil {
@@ -73,19 +76,18 @@ func main() {
 	buf := new(bytes.Buffer)
 
 	// initiate new session and read key
-	log.Println("Attempting connect HttpTun Server.", *httpAddr, "for dest.", *destAddr)
-	buf.Write([]byte(*destAddr))
+	log.Println("Attempting connect HttpTun Server.", *httpAddr)
+	//buf.Write([]byte(*destAddr))
 	resp, err := http.Post(
 		"http://"+*httpAddr+"/create",
 		"text/plain",
 		buf)
-	if err != nil {
-		panic(err)
-	}
-	key, _ := ioutil.ReadAll(resp.Body)
+	panicOn(err)
+	key, err := ioutil.ReadAll(resp.Body)
+	panicOn(err)
 	resp.Body.Close()
 
-	log.Println("ResponseWriterected, key", key)
+	log.Printf("client main(): after Post('/create') we got ResponseWriter with key = '%s'", string(key))
 
 	// ticker to set a rate at which to hit the server
 	tick := time.NewTicker(time.Duration(int64(*tickInterval)) * time.Millisecond)
@@ -93,8 +95,14 @@ func main() {
 	buf.Reset()
 	for {
 		select {
+		case b := <-read:
+			// fill buf here
+			po("client: <-read of '%s'\n", string(b))
+			buf.Write(b)
+
 		case <-tick.C:
-			// write buf to new http request
+			po("client: got tick.C\n")
+			// write buf to new http request, starting with key
 			req := bytes.NewBuffer(key)
 			buf.WriteTo(req)
 			resp, err := http.Post(
@@ -105,11 +113,18 @@ func main() {
 				log.Println(err.Error())
 				continue
 			}
+
 			// write http response response to conn
-			io.Copy(conn, resp.Body)
+
+			// we take apart the io.Copy to print out the response for debugging.
+			//_, err = io.Copy(conn, resp.Body)
+
+			body, err := ioutil.ReadAll(resp.Body)
+			panicOn(err)
+			po("client: resp.Body = '%s'\n", string(body))
+			_, err = conn.Write(body)
+			panicOn(err)
 			resp.Body.Close()
-		case b := <-read:
-			buf.Write(b)
 		}
 	}
 }

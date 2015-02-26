@@ -3,3 +3,6 @@ all:
 
 debug:
 	cd ..; make debug
+
+run:
+	cd ..; make run
