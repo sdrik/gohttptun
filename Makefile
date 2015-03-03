@@ -5,6 +5,8 @@ all:
 	go install
 	cd client-tcp-over-http; go build -o client-tcp-over-http; cp -p client-tcp-over-http ../bin
 	cd server-tcp-over-http; go build -o server-tcp-over-http; cp -p server-tcp-over-http ../bin
+	cd send; go build -o send; cp -p send ../bin
+	cd dest; go build -o dest; cp -p dest ../bin
 
 debug:
 	go install  -gcflags "-N -l" 

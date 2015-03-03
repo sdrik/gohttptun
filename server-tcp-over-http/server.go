@@ -22,13 +22,14 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"time"
 )
 
+//var destAddr = "127.0.0.1:12222" // tunnel destination
 var destAddr = "127.0.0.1:22" // tunnel destination
+//var destAddr = "127.0.0.1:1234" // tunnel destination
 
 type Server struct {
 	destIP   string
@@ -38,7 +39,8 @@ type Server struct {
 
 const (
 	readTimeoutMsec = 1000
-	keyLen          = 64
+	//keyLen          = 64
+	keyLen = 6
 )
 
 type proxy struct {
@@ -79,11 +81,12 @@ func (p *proxy) handle(pp proxyPacket) {
 
 	po("in proxy::handle(pp) with pp = '%#v'\n", pp)
 	// read from the request body and write to the ResponseWriter
-	n, err := p.conn.Write(pp.body)
-	if n != len(pp.body) {
+	writeMe := pp.body[keyLen:]
+	n, err := p.conn.Write(writeMe)
+	if n != len(writeMe) {
 		log.Printf("proxy::handle(pp): could only write %d of the %d bytes to the connection. err = '%v'", n, len(pp.body), err)
 	} else {
-		log.Printf("proxy::handle(pp): wrote all %d bytes to the final (sshd server) connection.", len(pp.body))
+		log.Printf("proxy::handle(pp): wrote all %d bytes of writeMe to the final (sshd server) connection: '%s'.", len(writeMe), string(writeMe))
 	}
 	pp.request.Body.Close()
 	if err == io.EOF {
@@ -93,7 +96,23 @@ func (p *proxy) handle(pp proxyPacket) {
 	}
 	// read out of the buffer and write it to conn
 	pp.resp.Header().Set("Content-type", "application/octet-stream")
-	n64, err := io.Copy(pp.resp, p.conn)
+	// temp for debug: n64, err := io.Copy(pp.resp, p.conn)
+
+	b500 := make([]byte, 500)
+
+	err = p.conn.SetReadDeadline(time.Now().Add(time.Millisecond * readTimeoutMsec))
+	panicOn(err)
+
+	n64, err := p.conn.Read(b500)
+	if err != nil {
+		// i/o timeout expected
+	}
+	fmt.Printf("\n\n server got reply from p.conn of len %d: '%s'\n", n64, string(b500[:n64]))
+	_, err = pp.resp.Write(b500[:n64])
+	if err != nil {
+		panic(err)
+	}
+
 	// don't panicOn(err)
 	log.Printf("proxy::handle(pp): io.Copy into pp.resp from p.conn moved %d bytes", n64)
 	pp.done <- true
@@ -111,7 +130,7 @@ func handler(c http.ResponseWriter, r *http.Request) {
 	pp := proxyPacket{
 		resp:    c,
 		request: r,
-		body:    body,
+		body:    body, // includes key of keyLen in prefix
 		done:    make(chan bool),
 	}
 	queue <- pp
@@ -121,16 +140,14 @@ func handler(c http.ResponseWriter, r *http.Request) {
 func (s *Server) createHandler(c http.ResponseWriter, r *http.Request) {
 	// fix destAddr on server side to prevent being a transport for other actions.
 
-	/*
-		// read destAddr
-		destAddr, err := ioutil.ReadAll(r.Body)
-		r.Body.Close()
-		if err != nil {
-			http.Error(c, "Could not read destAddr",
-				http.StatusInternalServerError)
-			return
-		}
-	*/
+	// destAddr used to be here, but no more. Still have to close the body.
+	_, err := ioutil.ReadAll(r.Body)
+	r.Body.Close()
+	if err != nil {
+		http.Error(c, "Could not read destAddr",
+			http.StatusInternalServerError)
+		return
+	}
 
 	key := genKey()
 	po("in createhandler(): Server::createHandler generated key '%s'\n", key)
@@ -194,14 +211,17 @@ func main() {
 
 	http.HandleFunc("/", handler)
 	http.HandleFunc("/create", s.createHandler)
-	fmt.Printf("about to ListenAndServer on httpAddr'%#v'\n", *httpAddr)
+	fmt.Printf("about to ListenAndServer on httpAddr'%#v'. Ultimate destAddr: '%s'\n", *httpAddr, destAddr)
 	http.ListenAndServe(*httpAddr, nil)
 }
 
 func genKey() string {
-	key := make([]byte, keyLen)
-	for i := 0; i < keyLen; i++ {
-		key[i] = byte(rand.Int())
-	}
-	return string(key)
+	return "key123"
+	/*
+		key := make([]byte, keyLen)
+		for i := 0; i < keyLen; i++ {
+			key[i] = byte(rand.Int())
+		}
+		return string(key)
+	*/
 }

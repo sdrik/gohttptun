@@ -49,9 +49,9 @@ func makeReadChan(r io.Reader, bufSize int) chan []byte {
 			if err != nil {
 				return
 			}
-			if n > 0 {
-				read <- b[0:n]
-			}
+			//if n > 0 {
+			read <- b[0:n]
+			//}
 		}
 	}()
 	return read
@@ -99,7 +99,7 @@ func main() {
 		select {
 		case b := <-read:
 			// fill buf here
-			po("client: <-read of '%s' of length %d added to buffer\n", string(b), len(b))
+			po("client: <-read of '%s'; hex:'%x' of length %d added to buffer\n", string(b), b, len(b))
 			buf.Write(b)
 			po("client: after write to buf of len(b)=%d, buf is now length %d\n", len(b), buf.Len())
 
