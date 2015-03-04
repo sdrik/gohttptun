@@ -1,6 +1,6 @@
 package gohttptun
 
-const keyLen = 64
+const KeyLen = 64
 
 var ReverseProxyIp string = ""
 var ReverseProxyPort int = 8888
