@@ -1,19 +1,3 @@
-/*
-Copyright 2013 Google Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package main
 
 import (
@@ -26,17 +10,19 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	tun "github.com/glycerine/gohttptun"
 )
 
 // print out shortcut
-var po = fmt.Printf
+var po = tun.VPrintf
 
 const bufSize = 1024
 
 var (
 	listenAddr   = flag.String("listen", ":2222", "local listen address")
-	httpAddr     = flag.String("http", "127.0.0.1:8888", "remote tunnel server")
-	tickInterval = flag.Int("tick", 500, "update interval (msec)") // orig: 250
+	httpAddr     = flag.String("http", fmt.Sprintf("%s:%d", tun.ReverseProxyIp, tun.ReverseProxyPort), "remote tunnel server")
+	tickInterval = flag.Int("tick", 250, "update interval (msec)") // orig: 250
 )
 
 // take a reader, and turn it into a channel of bufSize chunks of []byte

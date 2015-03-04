@@ -4,3 +4,4 @@
 *~
 client-tcp-over-http/client-tcp-over-http
 server-tcp-over-http/server-tcp-over-http
+bin/*

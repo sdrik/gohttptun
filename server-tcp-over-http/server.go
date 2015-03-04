@@ -1,19 +1,3 @@
-/*
-Copyright 2013 Google Inc.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package main
 
 import (
@@ -25,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	tun "github.com/glycerine/gohttptun"
 )
 
 //var destAddr = "127.0.0.1:12222" // tunnel destination
@@ -58,11 +44,11 @@ type proxyPacket struct {
 }
 
 // print out shortcut
-var po = fmt.Printf
+var po = tun.VPrintf
 
 func NewProxy(key, destAddr string) (p *proxy, err error) {
 	po("starting with NewProxy\n")
-	p = &proxy{C: make(chan proxyPacket), key: key, recvCount: 1}
+	p = &proxy{C: make(chan proxyPacket), key: key, recvCount: 0}
 	log.Println("Attempting connect", destAddr)
 	p.conn, err = net.Dial("tcp", destAddr)
 	panicOn(err)
@@ -86,7 +72,7 @@ func (p *proxy) handle(pp proxyPacket) {
 	if n != len(writeMe) {
 		log.Printf("proxy::handle(pp): could only write %d of the %d bytes to the connection. err = '%v'", n, len(pp.body), err)
 	} else {
-		log.Printf("proxy::handle(pp): wrote all %d bytes of writeMe to the final (sshd server) connection: '%s'.", len(writeMe), string(writeMe))
+		po("proxy::handle(pp): wrote all %d bytes of writeMe to the final (sshd server) connection: '%s'.", len(writeMe), string(writeMe))
 	}
 	pp.request.Body.Close()
 	if err == io.EOF {
@@ -107,7 +93,7 @@ func (p *proxy) handle(pp proxyPacket) {
 	if err != nil {
 		// i/o timeout expected
 	}
-	fmt.Printf("\n\n server got reply from p.conn of len %d: '%s'\n", n64, string(b500[:n64]))
+	po("\n\n server got reply from p.conn of len %d: '%s'\n", n64, string(b500[:n64]))
 	_, err = pp.resp.Write(b500[:n64])
 	if err != nil {
 		panic(err)
@@ -200,7 +186,7 @@ func proxyMuxer() {
 	po("proxyMuxer done\n")
 }
 
-var httpAddr = flag.String("http", ":8888", "http listen address")
+var httpAddr = flag.String("http", fmt.Sprintf("%s:%d", tun.ReverseProxyIp, tun.ReverseProxyPort), "http listen address")
 
 func main() {
 	flag.Parse()
@@ -212,7 +198,10 @@ func main() {
 	http.HandleFunc("/", handler)
 	http.HandleFunc("/create", s.createHandler)
 	fmt.Printf("about to ListenAndServer on httpAddr'%#v'. Ultimate destAddr: '%s'\n", *httpAddr, destAddr)
-	http.ListenAndServe(*httpAddr, nil)
+	err := http.ListenAndServe(*httpAddr, nil)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func genKey() string {
