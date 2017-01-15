@@ -13,13 +13,15 @@ import (
 const bufSize = 1024
 
 // take a reader, and turn it into a channel of bufSize chunks of []byte
-func makeReadChan(r io.Reader, bufSize int) chan []byte {
+func makeReadChan(r io.Reader, bufSize int) (chan []byte, chan bool) {
 	read := make(chan []byte)
+	closed := make(chan bool)
 	go func() {
 		for {
 			b := make([]byte, bufSize)
 			n, err := r.Read(b)
 			if err != nil {
+				closed <- true
 				return
 			}
 			//if n > 0 {
@@ -27,7 +29,7 @@ func makeReadChan(r io.Reader, bufSize int) chan []byte {
 			//}
 		}
 	}()
-	return read
+	return read, closed
 }
 
 type ForwardProxy struct {
@@ -78,7 +80,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 
 	// ticker to set a rate at which to hit the server
 	tick := time.NewTicker(time.Duration(int64(f.tickIntervalMsec)) * time.Millisecond)
-	read := makeReadChan(conn, bufSize)
+	read, closed := makeReadChan(conn, bufSize)
 	buf.Reset()
 	for {
 		select {
@@ -87,6 +89,10 @@ func (f *ForwardProxy) ListenAndServe() error {
 			po("client: <-read of '%s'; hex:'%x' of length %d added to buffer\n", string(b), b, len(b))
 			buf.Write(b)
 			po("client: after write to buf of len(b)=%d, buf is now length %d\n", len(b), buf.Len())
+
+		case <-closed:
+			log.Println("Client closed.")
+			return nil
 
 		case <-tick.C:
 			sendCount++
