@@ -69,11 +69,12 @@ func (f *ForwardProxy) ListenAndServe() error {
 		"text/plain",
 		buf)
 	panicOn(err)
-	key, err := ioutil.ReadAll(resp.Body)
+	bkey, err := ioutil.ReadAll(resp.Body)
 	panicOn(err)
 	resp.Body.Close()
+	key := string(bkey)
 
-	log.Printf("client main(): after Post('/create') we got ResponseWriter with key = '%x'", key)
+	log.Printf("client main(): after Post('/create') we got ResponseWriter with key = '%s'", key)
 
 	// ticker to set a rate at which to hit the server
 	tick := time.NewTicker(time.Duration(int64(f.tickIntervalMsec)) * time.Millisecond)
@@ -91,15 +92,20 @@ func (f *ForwardProxy) ListenAndServe() error {
 			sendCount++
 			po("\n ====================\n client sendCount = %d\n ====================\n", sendCount)
 			po("client: sendCount %d, got tick.C. key as always(?) = '%x'. buf is now size %d\n", sendCount, key, buf.Len())
-			// write buf to new http request, starting with key
-			req := bytes.NewBuffer(key)
-			buf.WriteTo(req)
-			resp, err := http.Post(
+			req, err := http.NewRequest(
+				"POST",
 				"http://"+f.revProxyAddr+"/ping",
-				"application/octet-stream",
-				req)
+				buf)
+			req.Header.Set("Content-type", "application/octet-stream")
+			req.Header.Set("X-Session-Id", key)
+			panicOn(err)
+			resp, err := http.DefaultTransport.RoundTrip(req)
 			if err != nil && err != io.EOF {
 				log.Println(err.Error())
+				continue
+			}
+			if resp.Header.Get("X-Session-Id") != key {
+				log.Println("Wrong or missing X-Session-Id. Packet skipped.")
 				continue
 			}
 

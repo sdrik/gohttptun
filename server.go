@@ -62,12 +62,11 @@ func (p *proxy) handle(pp proxyPacket) {
 
 	po("in proxy::handle(pp) with pp = '%#v'\n", pp)
 	// read from the request body and write to the ResponseWriter
-	writeMe := pp.body[KeyLen:]
-	n, err := p.conn.Write(writeMe)
-	if n != len(writeMe) {
+	n, err := p.conn.Write(pp.body)
+	if n != len(pp.body) {
 		log.Printf("proxy::handle(pp): could only write %d of the %d bytes to the connection. err = '%v'", n, len(pp.body), err)
 	} else {
-		po("proxy::handle(pp): wrote all %d bytes of writeMe to the final (sshd server) connection: '%s'.", len(writeMe), string(writeMe))
+		po("proxy::handle(pp): wrote all %d bytes of body to the final (sshd server) connection: '%s'.", len(pp.body), string(pp.body))
 	}
 	pp.request.Body.Close()
 	if err == io.EOF {
@@ -77,6 +76,7 @@ func (p *proxy) handle(pp proxyPacket) {
 	}
 	// read out of the buffer and write it to conn
 	pp.resp.Header().Set("Content-type", "application/octet-stream")
+	pp.resp.Header().Set("X-Session-Id", p.key)
 	// temp for debug: n64, err := io.Copy(pp.resp, p.conn)
 
 	b500 := make([]byte, 1<<17)
@@ -106,7 +106,7 @@ var createQueue = make(chan *proxy)
 func handler(c http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	panicOn(err)
-	po("top level handler(): in '/' and '/ping' handler, packet len without key: %d: making new proxyPacket, http.Request r = '%#v'. r.Body = '%s'\n", len(body)-KeyLen, *r, string(body))
+	po("top level handler(): in '/' and '/ping' handler, packet: %d: making new proxyPacket, http.Request r = '%#v'. r.Body = '%s'\n", len(body), *r, string(body))
 
 	pp := proxyPacket{
 		resp:    c,
@@ -153,18 +153,16 @@ func proxyMuxer() {
 	for {
 		select {
 		case pp := <-queue:
-			key := make([]byte, KeyLen)
 			// read key
-			//n, err := pp.req.Body.Read(key)
-			if len(pp.body) < KeyLen {
-				log.Printf("Couldn't read key, not enough bytes in body. len(body) = %d\n", len(pp.body))
+			key := pp.request.Header.Get("X-Session-Id")
+			if key == "" {
+				log.Printf("No X-Session-Id header found.\n")
 				continue
 			}
-			copy(key, pp.body)
 
 			po("proxyMuxer: from pp <- queue, we read key '%x'\n", key)
 			// find proxy
-			p, ok := proxyMap[string(key)]
+			p, ok := proxyMap[key]
 			if !ok {
 				log.Printf("Couldn't find proxy for key = '%x'", key)
 				continue
