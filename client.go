@@ -61,7 +61,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 
 	buf := new(bytes.Buffer)
 
-	sendCount := 0
+	seq := 0
 
 	// initiate new session and read key
 	log.Println("Attempting connect HttpTun Server.", f.revProxyAddr)
@@ -96,9 +96,9 @@ func (f *ForwardProxy) ListenAndServe() error {
 		case <-tick.C:
 		}
 
-		sendCount++
-		po("\n ====================\n client sendCount = %d\n ====================\n", sendCount)
-		po("client: sendCount %d, got tick.C. key as always(?) = '%s'. buf is now size %d\n", sendCount, key, buf.Len())
+		seq++
+		po("\n ====================\n client seq = %d\n ====================\n", seq)
+		po("client: seq %d, got tick.C. key as always(?) = '%s'. buf is now size %d\n", seq, key, buf.Len())
 		req, err := http.NewRequest(
 			"POST",
 			"http://"+f.revProxyAddr+"/ping",
