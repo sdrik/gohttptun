@@ -95,7 +95,7 @@ func (p *proxy) handle(pp proxyPacket) {
 	}
 
 	// don't panicOn(err)
-	log.Printf("proxy::handle(pp): io.Copy into pp.resp from p.conn moved %d bytes", n64)
+	po("proxy::handle(pp): io.Copy into pp.resp from p.conn moved %d bytes\n", n64)
 	pp.done <- true
 	po("proxy::handle(pp) done.\n")
 }
