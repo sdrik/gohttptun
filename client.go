@@ -111,13 +111,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 
 			// write http response response to conn
 
-			// we take apart the io.Copy to print out the response for debugging.
-			//_, err = io.Copy(conn, resp.Body)
-
-			body, err := ioutil.ReadAll(resp.Body)
-			panicOn(err)
-			po("client: resp.Body = '%s'\n", string(body))
-			_, err = conn.Write(body)
+			_, err = io.Copy(conn, resp.Body)
 			panicOn(err)
 			resp.Body.Close()
 		}
