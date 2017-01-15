@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+	"strings"
+	"encoding/base64"
 )
 
 type ReverseProxy struct {
@@ -202,8 +204,9 @@ func (s *ReverseProxy) ListenAndServe() {
 
 func genKey() string {
 	key := make([]byte, KeyLen)
-	for i := 0; i < KeyLen; i++ {
-		key[i] = byte(rand.Int())
+	_, err := rand.Read(key)
+	if err != nil {
+		panic(err.Error())
 	}
-	return string(key)
+	return strings.TrimRight(base64.StdEncoding.EncodeToString(key), "=")
 }
