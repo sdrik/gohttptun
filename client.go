@@ -56,7 +56,8 @@ func (f *ForwardProxy) ListenAndServe() error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			panic(err)
+			log.Println("Error accepting connection:", err)
+			continue
 		}
 		log.Println("accept conn", "localAddr.", conn.LocalAddr(), "remoteAddr.", conn.RemoteAddr())
 
@@ -71,10 +72,16 @@ func (f *ForwardProxy) ListenAndServe() error {
 			f.revProxyURL+"/create",
 			"text/plain",
 			buf)
-		panicOn(err)
+		if err != nil {
+			log.Println("Error connection to HttpTun server:", err)
+			continue
+		}
 		bkey, err := ioutil.ReadAll(resp.Body)
-		panicOn(err)
 		resp.Body.Close()
+		if err != nil {
+			log.Println("Error wrting to client:", err)
+			continue
+		}
 		key := string(bkey)
 
 		log.Printf("client main(): after Post('/create') we got ResponseWriter with key = '%s'", key)
@@ -106,9 +113,12 @@ func (f *ForwardProxy) ListenAndServe() error {
 				"POST",
 				f.revProxyURL+"/ping",
 				buf)
+			if err != nil {
+				log.Println("Error building a request:", err)
+				continue
+			}
 			req.Header.Set("Content-type", "application/octet-stream")
 			req.Header.Set("X-Session-Id", key)
-			panicOn(err)
 			resp, err := http.DefaultTransport.RoundTrip(req)
 			if err != nil && err != io.EOF {
 				log.Println(err.Error())
@@ -128,7 +138,9 @@ func (f *ForwardProxy) ListenAndServe() error {
 			// write http response response to conn
 
 			n, err := io.Copy(conn, resp.Body)
-			panicOn(err)
+			if err != nil {
+				disconnect = true
+			}
 			resp.Body.Close()
 			if n > 0 {
 				recvTime = roundTripTime
@@ -147,7 +159,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 			default:
 				nextPoll = 60 * time.Second
 			}
-			log.Println("nextPoll=%d", nextPoll)
+			log.Println("nextPoll=", nextPoll)
 			tick.Stop()
 			tick.Reset(nextPoll)
 		}
