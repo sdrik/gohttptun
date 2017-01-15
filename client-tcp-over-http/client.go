@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	tun "github.com/glycerine/gohttptun"
+	tun "github.com/sdrik/gohttptun"
 )
 
 // print out shortcut
