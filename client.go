@@ -82,7 +82,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 	tick := time.NewTicker(time.Duration(int64(f.tickIntervalMsec)) * time.Millisecond)
 	read, closed := makeReadChan(conn, bufSize)
 	buf.Reset()
-	for {
+	for disconnect := false; !disconnect; {
 		select {
 		case b := <-read:
 			// fill buf here
@@ -90,36 +90,37 @@ func (f *ForwardProxy) ListenAndServe() error {
 			buf.Write(b)
 			po("client: after write to buf of len(b)=%d, buf is now length %d\n", len(b), buf.Len())
 
-		case <-closed:
+		case disconnect = <-closed:
 			log.Println("Client closed.")
-			return nil
 
 		case <-tick.C:
-			sendCount++
-			po("\n ====================\n client sendCount = %d\n ====================\n", sendCount)
-			po("client: sendCount %d, got tick.C. key as always(?) = '%x'. buf is now size %d\n", sendCount, key, buf.Len())
-			req, err := http.NewRequest(
-				"POST",
-				"http://"+f.revProxyAddr+"/ping",
-				buf)
-			req.Header.Set("Content-type", "application/octet-stream")
-			req.Header.Set("X-Session-Id", key)
-			panicOn(err)
-			resp, err := http.DefaultTransport.RoundTrip(req)
-			if err != nil && err != io.EOF {
-				log.Println(err.Error())
-				continue
-			}
-			if resp.Header.Get("X-Session-Id") != key {
-				log.Println("Wrong or missing X-Session-Id. Packet skipped.")
-				continue
-			}
-
-			// write http response response to conn
-
-			_, err = io.Copy(conn, resp.Body)
-			panicOn(err)
-			resp.Body.Close()
 		}
+
+		sendCount++
+		po("\n ====================\n client sendCount = %d\n ====================\n", sendCount)
+		po("client: sendCount %d, got tick.C. key as always(?) = '%s'. buf is now size %d\n", sendCount, key, buf.Len())
+		req, err := http.NewRequest(
+			"POST",
+			"http://"+f.revProxyAddr+"/ping",
+			buf)
+		req.Header.Set("Content-type", "application/octet-stream")
+		req.Header.Set("X-Session-Id", key)
+		panicOn(err)
+		resp, err := http.DefaultTransport.RoundTrip(req)
+		if err != nil && err != io.EOF {
+			log.Println(err.Error())
+			continue
+		}
+		if resp.Header.Get("X-Session-Id") != key {
+			log.Println("Wrong or missing X-Session-Id. Packet skipped.")
+			continue
+		}
+
+		// write http response response to conn
+
+		_, err := io.Copy(conn, resp.Body)
+		panicOn(err)
+		resp.Body.Close()
 	}
+	return nil
 }
