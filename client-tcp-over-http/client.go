@@ -14,6 +14,7 @@ var po = tun.VPrintf
 const bufSize = 1024
 
 var (
+	verbose      = flag.Bool("verbose", false, "verbose")
 	listenAddr   = flag.String("listen", ":2222", "local listen address")
 	httpAddr     = flag.String("http", fmt.Sprintf("%s:%d", tun.ReverseProxyIp, tun.ReverseProxyPort), "remote tunnel server")
 	tickInterval = flag.Int("tick", 250, "update interval (msec)") // orig: 250
@@ -21,6 +22,7 @@ var (
 
 func main() {
 	flag.Parse()
+	tun.Verbose = *verbose
 	log.SetPrefix("tun.client: ")
 
 	f := tun.NewForwardProxy(*listenAddr, *httpAddr, *tickInterval)
