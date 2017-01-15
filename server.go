@@ -21,7 +21,7 @@ type ReverseProxy struct {
 }
 
 const (
-	readTimeoutMsec = 1000
+	readTimeoutMsec = 1
 )
 
 type proxy struct {
