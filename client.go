@@ -82,6 +82,8 @@ func (f *ForwardProxy) ListenAndServe() error {
 	tick := time.NewTicker(time.Duration(int64(f.tickIntervalMsec)) * time.Millisecond)
 	read, closed := makeReadChan(conn, bufSize)
 	buf.Reset()
+	var sendTime, recvTime time.Time
+	var sendSize, recvSize int64
 	for disconnect := false; !disconnect; {
 		select {
 		case b := <-read:
@@ -115,12 +117,23 @@ func (f *ForwardProxy) ListenAndServe() error {
 			log.Println("Wrong or missing X-Session-Id. Packet skipped.")
 			continue
 		}
+		roundTripTime := time.Now()
+		if resp.Request.ContentLength > 0 {
+			sendTime = roundTripTime
+			sendSize = resp.Request.ContentLength
+			log.Printf("sendSize=%d sendTime=%s\n", sendSize, sendTime)
+		}
 
 		// write http response response to conn
 
-		_, err := io.Copy(conn, resp.Body)
+		n, err := io.Copy(conn, resp.Body)
 		panicOn(err)
 		resp.Body.Close()
+		if n > 0 {
+			recvTime = roundTripTime
+			recvSize = n
+			log.Printf("recvSize=%d recvTime=%s\n", recvSize, recvTime)
+		}
 	}
 	return nil
 }
