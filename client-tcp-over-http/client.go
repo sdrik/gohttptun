@@ -16,7 +16,7 @@ const bufSize = 1024
 var (
 	verbose      = flag.Bool("verbose", false, "verbose")
 	listenAddr   = flag.String("listen", ":2222", "local listen address")
-	httpAddr     = flag.String("http", fmt.Sprintf("%s:%d", tun.ReverseProxyIp, tun.ReverseProxyPort), "remote tunnel server")
+	httpAddr     = flag.String("http", fmt.Sprintf("http://%s:%d", tun.ReverseProxyIp, tun.ReverseProxyPort), "remote tunnel server")
 	tickInterval = flag.Int("tick", 250, "update interval (msec)") // orig: 250
 )
 

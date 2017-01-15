@@ -34,14 +34,14 @@ func makeReadChan(r io.Reader, bufSize int) (chan []byte, chan bool) {
 
 type ForwardProxy struct {
 	listenAddr       string
-	revProxyAddr     string
+	revProxyURL      string
 	tickInterval     time.Duration
 }
 
-func NewForwardProxy(listenAddr string, revProxAddr string, tickIntervalMsec int) *ForwardProxy {
+func NewForwardProxy(listenAddr string, revProxyURL string, tickIntervalMsec int) *ForwardProxy {
 	return &ForwardProxy{
 		listenAddr:       listenAddr,
-		revProxyAddr:     revProxAddr, // http server's address
+		revProxyURL:      revProxyURL,
 		tickInterval:     time.Duration(tickIntervalMsec) * time.Millisecond,
 	}
 }
@@ -51,7 +51,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("listen on '%v', with revProxAddr '%v'", f.listenAddr, f.revProxyAddr)
+	log.Printf("listen on '%v', with revProxAddr '%v'", f.listenAddr, f.revProxyURL)
 
 	for {
 		conn, err := listener.Accept()
@@ -65,10 +65,10 @@ func (f *ForwardProxy) ListenAndServe() error {
 		seq := 0
 
 		// initiate new session and read key
-		log.Println("Attempting connect HttpTun Server.", f.revProxyAddr)
+		log.Println("Attempting connect HttpTun Server.", f.revProxyURL)
 		//buf.Write([]byte(*destAddr))
 		resp, err := http.Post(
-			"http://"+f.revProxyAddr+"/create",
+			f.revProxyURL+"/create",
 			"text/plain",
 			buf)
 		panicOn(err)
@@ -104,7 +104,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 			po("client: seq %d, got tick.C. key as always(?) = '%s'. buf is now size %d\n", seq, key, buf.Len())
 			req, err := http.NewRequest(
 				"POST",
-				"http://"+f.revProxyAddr+"/ping",
+				f.revProxyURL+"/ping",
 				buf)
 			req.Header.Set("Content-type", "application/octet-stream")
 			req.Header.Set("X-Session-Id", key)
