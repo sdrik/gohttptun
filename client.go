@@ -34,16 +34,42 @@ func makeReadChan(r io.Reader, bufSize int) (chan []byte, chan bool) {
 
 type ForwardProxy struct {
 	listenAddr       string
-	revProxyURL      string
+	remoteProxies    []RemoteProxy
 	tickInterval     time.Duration
 }
 
-func NewForwardProxy(listenAddr string, revProxyURL string, tickIntervalMsec int) *ForwardProxy {
+type RemoteProxy struct {
+	URL            string
+	FrontingDomain string
+}
+
+func NewForwardProxy(listenAddr string, remoteProxies []RemoteProxy, tickIntervalMsec int) *ForwardProxy {
 	return &ForwardProxy{
 		listenAddr:       listenAddr,
-		revProxyURL:      revProxyURL,
+		remoteProxies:    remoteProxies,
 		tickInterval:     time.Duration(tickIntervalMsec) * time.Millisecond,
 	}
+}
+
+func (f *ForwardProxy) roundTrip(location string, key string, body io.Reader) (*http.Response, error) {
+	proxy := f.remoteProxies[0]
+	req, err := http.NewRequest(
+		"POST",
+		proxy.URL + location,
+		body)
+	if err != nil {
+		log.Println("Error building a request:", err)
+		return nil, err
+	}
+	if proxy.FrontingDomain != "" {
+		req.Host = req.URL.Host
+		req.URL.Host = proxy.FrontingDomain
+	}
+	req.Header.Set("Content-type", "application/octet-stream")
+	if key != "" {
+		req.Header.Set("X-Session-Id", key)
+	}
+	return http.DefaultTransport.RoundTrip(req)
 }
 
 func (f *ForwardProxy) ListenAndServe() error {
@@ -51,7 +77,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("listen on '%v', with revProxAddr '%v'", f.listenAddr, f.revProxyURL)
+	log.Printf("listen on '%v'", f.listenAddr)
 
 	for {
 		conn, err := listener.Accept()
@@ -66,14 +92,10 @@ func (f *ForwardProxy) ListenAndServe() error {
 		seq := 0
 
 		// initiate new session and read key
-		log.Println("Attempting connect HttpTun Server.", f.revProxyURL)
-		//buf.Write([]byte(*destAddr))
-		resp, err := http.Post(
-			f.revProxyURL+"/create",
-			"text/plain",
-			buf)
+		log.Println("Attempting connect HttpTun Server.")
+		resp, err := f.roundTrip("/create", "", buf)
 		if err != nil {
-			log.Println("Error connection to HttpTun server:", err)
+			log.Println("Error connecting to HttpTun server:", err)
 			continue
 		}
 		bkey, err := ioutil.ReadAll(resp.Body)
@@ -109,19 +131,9 @@ func (f *ForwardProxy) ListenAndServe() error {
 			seq++
 			po("\n ====================\n client seq = %d\n ====================\n", seq)
 			po("client: seq %d, got tick.C. key as always(?) = '%s'. buf is now size %d\n", seq, key, buf.Len())
-			req, err := http.NewRequest(
-				"POST",
-				f.revProxyURL+"/ping",
-				buf)
+			resp, err := f.roundTrip("/ping", key, buf)
 			if err != nil {
-				log.Println("Error building a request:", err)
-				continue
-			}
-			req.Header.Set("Content-type", "application/octet-stream")
-			req.Header.Set("X-Session-Id", key)
-			resp, err := http.DefaultTransport.RoundTrip(req)
-			if err != nil && err != io.EOF {
-				log.Println(err.Error())
+				log.Println("Error sending a request:", err)
 				continue
 			}
 			if resp.Header.Get("X-Session-Id") != key {
