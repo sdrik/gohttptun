@@ -35,14 +35,14 @@ func makeReadChan(r io.Reader, bufSize int) (chan []byte, chan bool) {
 type ForwardProxy struct {
 	listenAddr       string
 	revProxyAddr     string
-	tickIntervalMsec int
+	tickInterval     time.Duration
 }
 
 func NewForwardProxy(listenAddr string, revProxAddr string, tickIntervalMsec int) *ForwardProxy {
 	return &ForwardProxy{
 		listenAddr:       listenAddr,
 		revProxyAddr:     revProxAddr, // http server's address
-		tickIntervalMsec: tickIntervalMsec,
+		tickInterval:     time.Duration(tickIntervalMsec) * time.Millisecond,
 	}
 }
 
@@ -79,7 +79,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 	log.Printf("client main(): after Post('/create') we got ResponseWriter with key = '%s'", key)
 
 	// ticker to set a rate at which to hit the server
-	tick := time.NewTicker(time.Duration(int64(f.tickIntervalMsec)) * time.Millisecond)
+	tick := time.NewTimer(f.tickInterval)
 	read, closed := makeReadChan(conn, bufSize)
 	buf.Reset()
 	var sendTime, recvTime time.Time
@@ -134,6 +134,21 @@ func (f *ForwardProxy) ListenAndServe() error {
 			recvSize = n
 			log.Printf("recvSize=%d recvTime=%s\n", recvSize, recvTime)
 		}
+
+		var nextPoll time.Duration
+		switch {
+		case roundTripTime.Sub(sendTime) < 5 * time.Second, roundTripTime.Sub(recvTime) < 5 * time.Second:
+			nextPoll = f.tickInterval
+		case roundTripTime.Sub(sendTime) < 30 * time.Second, roundTripTime.Sub(recvTime) < 30 * time.Second:
+			nextPoll = 5 * time.Second
+		case roundTripTime.Sub(sendTime) < 300 * time.Second, roundTripTime.Sub(recvTime) < 300 * time.Second:
+			nextPoll = 30 * time.Second
+		default:
+			nextPoll = 60 * time.Second
+		}
+		log.Println("nextPoll=%d", nextPoll)
+		tick.Stop()
+		tick.Reset(nextPoll)
 	}
 	return nil
 }
