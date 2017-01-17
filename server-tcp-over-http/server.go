@@ -15,10 +15,12 @@ var listenAddr = flag.String("http", fmt.Sprintf("%s:%d", tun.ReverseProxyIp, tu
 
 var verbose = flag.Bool("verbose", false, "verbose")
 
+var prefix = flag.String("prefix", tun.ReverseProxyPrefix, "path prefix")
+
 func main() {
 	flag.Parse()
 	tun.Verbose = *verbose
 
-	s := tun.NewReverseProxy(*listenAddr, destAddr)
+	s := tun.NewReverseProxy(*listenAddr, destAddr, *prefix)
 	s.ListenAndServe()
 }

@@ -18,6 +18,7 @@ type ReverseProxy struct {
 	destPort   string
 	destAddr   string
 	listenAddr string
+	prefix     string
 }
 
 const (
@@ -179,10 +180,11 @@ func proxyMuxer() {
 	po("proxyMuxer done\n")
 }
 
-func NewReverseProxy(listenAddr string, destAddr string) *ReverseProxy {
+func NewReverseProxy(listenAddr string, destAddr string, prefix string) *ReverseProxy {
 	return &ReverseProxy{
 		destAddr:   destAddr,
 		listenAddr: listenAddr,
+		prefix:     prefix,
 	}
 }
 
@@ -190,8 +192,8 @@ func (s *ReverseProxy) ListenAndServe() {
 
 	go proxyMuxer()
 
-	http.HandleFunc("/", handler)
-	http.HandleFunc("/create", s.createHandler)
+	http.HandleFunc(s.prefix+"/", handler)
+	http.HandleFunc(s.prefix+"/create", s.createHandler)
 	fmt.Printf("about to ListenAndServer on listenAddr '%#v'. Ultimate destAddr: '%s'\n",
 		s.listenAddr, s.destAddr)
 	err := http.ListenAndServe(s.listenAddr, nil)
