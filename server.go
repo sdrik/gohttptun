@@ -26,7 +26,6 @@ const (
 )
 
 type proxy struct {
-	C         chan proxyPacket
 	key       string
 	conn      net.Conn
 	recvCount int
@@ -44,7 +43,7 @@ var po = VPrintf
 
 func NewProxy(key, destAddr string) (p *proxy, err error) {
 	po("starting with NewProxy\n")
-	p = &proxy{C: make(chan proxyPacket), key: key, recvCount: 0}
+	p = &proxy{key: key, recvCount: 0}
 	log.Println("Attempting connect", destAddr)
 	p.conn, err = net.Dial("tcp", destAddr)
 	panicOn(err)
