@@ -175,5 +175,7 @@ func (f *ForwardProxy) ListenAndServe() error {
 			tick.Stop()
 			tick.Reset(nextPoll)
 		}
+		buf.Reset()
+		resp, err = f.roundTrip("/close", key, buf)
 	}
 }

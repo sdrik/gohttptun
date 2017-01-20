@@ -29,6 +29,7 @@ type proxy struct {
 	conn      net.Conn
 	recvCount int
 	buf       *SyncBuffer
+	closed    bool
 }
 
 type proxyPacket struct {
@@ -52,7 +53,7 @@ func NewProxy(key, destAddr string) (p *proxy, err error) {
 
 	go func() {
 		_, err := io.Copy(p.buf, p.conn)
-		if err != nil {
+		if err != nil && !p.closed {
 			log.Println("proxy::read error", err)
 		}
 	}()
@@ -98,6 +99,7 @@ func (p *proxy) handle(pp proxyPacket) {
 
 var queue = make(chan proxyPacket)
 var createQueue = make(chan *proxy)
+var closeQueue = make(chan string)
 
 func handler(c http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
@@ -143,6 +145,14 @@ func (s *ReverseProxy) createHandler(c http.ResponseWriter, r *http.Request) {
 	po("Server::createHandler done.\n")
 }
 
+func (s *ReverseProxy) closeHandler(c http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get("X-Session-Id")
+	if key == "" {
+		log.Printf("No X-Session-Id header found.\n")
+	}
+	closeQueue <- key
+}
+
 func proxyMuxer() {
 	po("proxyMuxer started\n")
 	proxyMap := make(map[string]*proxy)
@@ -170,6 +180,18 @@ func proxyMuxer() {
 			po("proxyMuxer: got p=%p on <-createQueue\n", p)
 			proxyMap[p.key] = p
 			po("proxyMuxer: after adding key '%x', proxyMap is now: '%#v'\n", p.key, proxyMap)
+		case key := <-closeQueue:
+			po("proxyMuxer: got key=%x on <-closeQueue\n", key)
+			p, ok := proxyMap[key]
+			if !ok {
+				log.Printf("Couldn't find proxy for key = '%x'", key)
+				continue
+			}
+			po("proxyMuxer found proxy for key '%x'\n", key)
+			p.closed = true
+			p.conn.Close()
+			delete(proxyMap, key)
+			po("proxyMuxer proxy for key '%x' deleted\n", key)
 		}
 	}
 	po("proxyMuxer done\n")
@@ -189,6 +211,7 @@ func (s *ReverseProxy) ListenAndServe() {
 
 	http.HandleFunc(s.prefix+"/", handler)
 	http.HandleFunc(s.prefix+"/create", s.createHandler)
+	http.HandleFunc(s.prefix+"/close", s.closeHandler)
 	fmt.Printf("about to ListenAndServer on listenAddr '%#v'. Ultimate destAddr: '%s'\n",
 		s.listenAddr, s.destAddr)
 	err := http.ListenAndServe(s.listenAddr, nil)
