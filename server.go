@@ -8,7 +8,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"time"
 	"strings"
 	"encoding/base64"
 )
@@ -29,6 +28,7 @@ type proxy struct {
 	key       string
 	conn      net.Conn
 	recvCount int
+	buf       *SyncBuffer
 }
 
 type proxyPacket struct {
@@ -43,13 +43,19 @@ var po = VPrintf
 
 func NewProxy(key, destAddr string) (p *proxy, err error) {
 	po("starting with NewProxy\n")
-	p = &proxy{key: key, recvCount: 0}
+	p = &proxy{key: key, recvCount: 0, buf: new(SyncBuffer)}
 	log.Println("Attempting connect", destAddr)
 	p.conn, err = net.Dial("tcp", destAddr)
 	panicOn(err)
 
-	err = p.conn.SetReadDeadline(time.Now().Add(time.Millisecond * readTimeoutMsec))
 	panicOn(err)
+
+	go func() {
+		_, err := io.Copy(p.buf, p.conn)
+		if err != nil {
+			log.Println("proxy::read error", err)
+		}
+	}()
 
 	log.Println("ResponseWriter directed to ", destAddr)
 	po("done with NewProxy\n")
@@ -79,17 +85,7 @@ func (p *proxy) handle(pp proxyPacket) {
 	pp.resp.Header().Set("X-Session-Id", p.key)
 	// temp for debug: n64, err := io.Copy(pp.resp, p.conn)
 
-	b500 := make([]byte, 1<<17)
-
-	err = p.conn.SetReadDeadline(time.Now().Add(time.Millisecond * readTimeoutMsec))
-	panicOn(err)
-
-	n64, err := p.conn.Read(b500)
-	if err != nil {
-		// i/o timeout expected
-	}
-	po("\n\n server got reply from p.conn of len %d: '%s'\n", n64, string(b500[:n64]))
-	_, err = pp.resp.Write(b500[:n64])
+	n64, err := io.Copy(pp.resp, p.buf)
 	if err != nil {
 		panic(err)
 	}
