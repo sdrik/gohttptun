@@ -140,6 +140,10 @@ func (f *ForwardProxy) ListenAndServe() error {
 				log.Println("Wrong or missing X-Session-Id. Packet skipped.")
 				continue
 			}
+			if resp.StatusCode != 200 {
+				log.Printf("Bad HTTP status (%d). Packet skipped.\n")
+				continue
+			}
 			roundTripTime := time.Now()
 			if resp.Request.ContentLength > 0 {
 				sendTime = roundTripTime
