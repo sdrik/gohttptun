@@ -145,9 +145,13 @@ func (f *ForwardProxy) ListenAndServe() error {
 				continue
 			}
 			roundTripTime := time.Now()
+			fullbuf := false
 			if resp.Request.ContentLength > 0 {
 				sendTime = roundTripTime
 				sendSize = resp.Request.ContentLength
+				if sendSize == 1<<17 {
+					fullbuf = true
+				}
 				log.Printf("sendSize=%d sendTime=%s\n", sendSize, sendTime)
 			}
 
@@ -161,11 +165,16 @@ func (f *ForwardProxy) ListenAndServe() error {
 			if n > 0 {
 				recvTime = roundTripTime
 				recvSize = n
+				if recvSize == 1<<17 {
+					fullbuf = true
+				}
 				log.Printf("recvSize=%d recvTime=%s\n", recvSize, recvTime)
 			}
 
 			var nextPoll time.Duration
 			switch {
+			case fullbuf:
+				nextPoll = 0
 			case roundTripTime.Sub(sendTime) < 5 * time.Second, roundTripTime.Sub(recvTime) < 5 * time.Second:
 				nextPoll = f.tickInterval
 			case roundTripTime.Sub(sendTime) < 30 * time.Second, roundTripTime.Sub(recvTime) < 30 * time.Second:
