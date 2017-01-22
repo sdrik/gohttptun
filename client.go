@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const bufSize = 1024*1024
+const bufSize = 1<<17
 
 // take a reader, and turn it into a channel of bufSize chunks of []byte
 func makeReadChan(r io.Reader, bufSize int) (chan []byte, chan bool) {

@@ -86,7 +86,7 @@ func (p *proxy) handle(pp proxyPacket) {
 	pp.resp.Header().Set("X-Session-Id", p.key)
 	// temp for debug: n64, err := io.Copy(pp.resp, p.conn)
 
-	n64, err := io.Copy(pp.resp, p.buf)
+	n64, err := io.Copy(pp.resp, io.LimitReader(p.buf, 1<<17))
 	if err != nil {
 		panic(err)
 	}
